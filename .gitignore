@@ -1,0 +1,66 @@
+# ---------------------------------------------------------------------------
+# Sentinel Brief — .gitignore
+# Public repo = source + deliverables only. Strategy/working docs and any
+# environment/credential material are kept out of git history entirely so the
+# private->public flip at submission is safe.
+# ---------------------------------------------------------------------------
+
+# --- Python venvs & build/cache artifacts ---
+.venv/
+.venv*/
+**/.venv/
+**/.venv*/
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.egg-info/
+**/*.egg-info/
+.pytest_cache/
+**/.pytest_cache/
+build/
+dist/
+.mypy_cache/
+.ruff_cache/
+
+# --- Secrets / credentials / environment (never commit) ---
+.env
+.env.*
+*.env
+**/.env
+**/.env.*
+!.env.example
+!**/.env.example
+*.pem
+*.key
+*-key.json
+*credentials*.json
+service-account*.json
+adc.json
+application_default_credentials.json
+.secrets/
+
+# --- Throwaway spike (references the dev GCP project; not a deliverable) ---
+spike/
+
+# --- Internal strategy / working docs (NOT public deliverables) ---
+HACKATHON.md
+PLAN.md
+RECON.md
+UNIQUE_IDEA.md
+BUILD-LOG.md
+LANE-A-CHECKLIST.md
+DEMO-SCRIPT.md
+CUE-CARD.md
+COST-LOG.md
+
+# --- Run logs (may echo the GCP project / live output; not deliverables) ---
+*.log
+**/*.log
+
+# --- OS / editor noise ---
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*~

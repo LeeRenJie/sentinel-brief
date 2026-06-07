@@ -1,0 +1,13 @@
+# Sentinel Brief — pinned deps (locked at Day-0 spike; no new deps after D7 per R9).
+# Requires Python >= 3.13 (splunklib.ai). Verified on 3.14.3.
+#
+# splunklib.ai ships on the develop branch / 3.0.x line, NOT in PyPI splunk-sdk 2.1.1.
+# [google] extra pulls: pydantic>=2.13.4, mcp>=1.27.1, langchain, httpx (via [ai])
+#                       + langchain-google-genai==4.2.2, google-auth>=2.52.0
+splunk-sdk[google] @ git+https://github.com/splunk/splunk-sdk-python.git@develop
+
+# Pin pydantic for the typed IncidentBrief (F2). Pulled transitively; pinned for safety.
+pydantic>=2.13.4
+
+# Test runner (dev only).
+pytest>=8.0
