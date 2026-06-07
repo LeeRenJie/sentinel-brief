@@ -1,0 +1,5 @@
+# Web backend only. The live /api/run path additionally needs the parent
+# sentinel_brief package's deps (see ../../requirements.txt), but GET /api/brief
+# and the static SPA need nothing more than these two.
+fastapi>=0.110
+uvicorn[standard]>=0.29

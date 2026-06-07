@@ -1,0 +1,48 @@
+{
+  "detection_name": "Excessive Admin-Share Logons by Single Account",
+  "verdict": "true_positive",
+  "severity": "critical",
+  "confidence": 1.0,
+  "summary": "Compromised service account 'svc_backup' used for lateral movement to 5 hosts, including a Domain Controller, from WKS-014 after a PsExec execution.",
+  "mitre_techniques": ["T1021.002", "T1569.002", "T1078.002"],
+  "timeline": [
+    {"timestamp": "2026-05-31T10:08:12+08:00", "source_index": "edr", "host": "WKS-014", "user": "jdoe", "description": "Suspicious download via powershell.exe"},
+    {"timestamp": "2026-05-31T10:10:55+08:00", "source_index": "edr", "host": "WKS-014", "user": "svc_backup", "description": "Remote execution tool PsExec.exe detected"},
+    {"timestamp": "2026-05-31T10:11:04+08:00", "source_index": "auth", "host": "WKS-014", "user": "svc_backup", "description": "Admin share logon to FS-01"},
+    {"timestamp": "2026-05-31T10:11:47+08:00", "source_index": "auth", "host": "WKS-014", "user": "svc_backup", "description": "Admin share logon to FS-02"},
+    {"timestamp": "2026-05-31T10:12:33+08:00", "source_index": "auth", "host": "WKS-014", "user": "svc_backup", "description": "Admin share logon to DC-01"},
+    {"timestamp": "2026-05-31T10:13:58+08:00", "source_index": "auth", "host": "WKS-014", "user": "svc_backup", "description": "Admin share logon to APP-03"},
+    {"timestamp": "2026-05-31T10:14:40+08:00", "source_index": "auth", "host": "WKS-014", "user": "svc_backup", "description": "Admin share logon to APP-04"}
+  ],
+  "blast_radius": [
+    {"entity": "WKS-014", "entity_type": "host", "role": "origin", "exposure_rank": 1},
+    {"entity": "svc_backup", "entity_type": "account", "role": "credential-used", "exposure_rank": 2},
+    {"entity": "jdoe", "entity_type": "account", "role": "initial-compromise", "exposure_rank": 3},
+    {"entity": "DC-01", "entity_type": "host", "role": "pivoted-to", "exposure_rank": 4},
+    {"entity": "APP-03", "entity_type": "host", "role": "pivoted-to", "exposure_rank": 5},
+    {"entity": "APP-04", "entity_type": "host", "role": "pivoted-to", "exposure_rank": 6},
+    {"entity": "FS-01", "entity_type": "host", "role": "pivoted-to", "exposure_rank": 7},
+    {"entity": "FS-02", "entity_type": "host", "role": "pivoted-to", "exposure_rank": 8}
+  ],
+  "proposed_actions": [
+    {"action_id": "isolate-WKS-014", "title": "Isolate host WKS-014", "rationale": "WKS-014 is the origin of the lateral movement, observed running PsExec with the compromised svc_backup account after a suspicious PowerShell download by user jdoe. Isolation contains the threat at its source.", "tool": "EDR Console", "dry_run": true, "requires_approval": true},
+    {"action_id": "disable-svc_backup", "title": "Disable account svc_backup", "rationale": "svc_backup is confirmed compromised and was used to access 5 critical servers including a DC. Disabling it immediately halts all lateral movement capabilities.", "tool": "Active Directory", "dry_run": true, "requires_approval": true},
+    {"action_id": "disable-jdoe", "title": "Disable account jdoe", "rationale": "jdoe was used for the initial suspicious download on WKS-014, the likely initial point of compromise. Disabling it prevents further use of potentially compromised credentials.", "tool": "Active Directory", "dry_run": true, "requires_approval": true}
+  ],
+  "proposed_detection": {
+    "problem": "The current detection flags admin-share fan-out on a flat distinct-destination threshold, so it cannot tell a real attacker from a legitimate service account that touches many hosts nightly — producing a steady stream of false positives and alert fatigue.",
+    "current_spl": "index=auth action=logon logon_type=3\n| stats dc(dest) as distinct_dests by user\n| where distinct_dests > 3",
+    "proposed_spl": "index=edr process_name=PsExec.exe\n| fields user, host\n| join user [\n    search index=auth action=logon logon_type=3\n    | stats dc(dest) as distinct_dests by user\n    | where distinct_dests > 3\n]",
+    "spl_diff": "--- current_spl\n+++ proposed_spl\n- index=auth action=logon logon_type=3\n- | stats dc(dest) as distinct_dests by user\n- | where distinct_dests > 3\n+ index=edr process_name=PsExec.exe\n+ | fields user, host\n+ | join user [\n+     search index=auth action=logon logon_type=3\n+     | stats dc(dest) as distinct_dests by user\n+     | where distinct_dests > 3\n+ ]",
+    "expected_effect": "Correlates the admin-share fan-out with a preceding EDR remote-execution-tool signal (PsExec), eliminating the legitimate service-account false-positive class while retaining the true positive for this attack pattern."
+  },
+  "detection_backtest": {
+    "old_alert_count": 4,
+    "new_alert_count": 1,
+    "false_positives_eliminated": 3,
+    "eliminated_accounts": ["svc_monitor", "svc_patch", "svc_vuln"],
+    "true_positive_retained": true,
+    "alert_reduction_pct": 0.75,
+    "window": "Last 7 days (seeded scenario window)"
+  }
+}
