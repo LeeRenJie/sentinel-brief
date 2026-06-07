@@ -181,13 +181,20 @@ def test_render_diff_synthesized_when_no_unified_diff():
 # ---------------- mock-service determinism ----------------
 
 def test_oneshot_routing_deterministic():
+    from sentinel_brief.mock_service import SEED_BENIGN_FANOUT_AUTH
+
     svc = MockService()
     for _ in range(3):
-        assert svc.jobs.oneshot("search index=auth logon_type=3") == SEED_AUTH_EVENTS
+        # auth path now includes the benign-fanout service accounts (the FP class)
+        # so mock-mode auth queries reflect the seeded reality. The malicious chain
+        # is still present (prefix), zero drift.
+        auth = svc.jobs.oneshot("search index=auth logon_type=3")
+        assert auth == SEED_AUTH_EVENTS + SEED_BENIGN_FANOUT_AUTH
+        assert auth[: len(SEED_AUTH_EVENTS)] == SEED_AUTH_EVENTS
         assert svc.jobs.oneshot("search index=edr powershell") == SEED_EDR_EVENTS
         assert svc.jobs.oneshot("| makeresults") == [{"_time": "now", "count": "1"}]
         union = svc.jobs.oneshot("search index=* | stats count")
-        assert union == SEED_AUTH_EVENTS + SEED_EDR_EVENTS
+        assert union == SEED_AUTH_EVENTS + SEED_BENIGN_FANOUT_AUTH + SEED_EDR_EVENTS
 
 
 def test_mock_service_username():

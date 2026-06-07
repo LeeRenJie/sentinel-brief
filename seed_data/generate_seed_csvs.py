@@ -32,6 +32,7 @@ if str(_PKG_PARENT) not in sys.path:
 
 from sentinel_brief.mock_service import (  # noqa: E402
     SEED_AUTH_EVENTS,
+    SEED_BENIGN_FANOUT_AUTH,
     SEED_EDR_EVENTS,
 )
 
@@ -56,23 +57,28 @@ _BENIGN_AUTH = [
     {"_time": "2026-05-31T01:05:44Z", "host": "WKS-202", "user": "bob",
      "action": "logon", "logon_type": "2", "src": "WKS-202", "dest": "WKS-202",
      "share": "", "status": "success", "event_id": "4624"},
-    {"_time": "2026-05-31T01:30:00Z", "host": "BKP-09", "user": "svc_monitor",
-     "action": "logon", "logon_type": "3", "src": "BKP-09", "dest": "FS-01",
-     "share": "C$", "status": "success", "event_id": "4624"},
-    {"_time": "2026-05-31T01:31:12Z", "host": "BKP-09", "user": "svc_monitor",
-     "action": "logon", "logon_type": "3", "src": "BKP-09", "dest": "FS-02",
-     "share": "C$", "status": "success", "event_id": "4624"},
     {"_time": "2026-05-31T02:40:00Z", "host": "WKS-014", "user": "jdoe",
      "action": "logon", "logon_type": "2", "src": "WKS-014", "dest": "WKS-014",
      "share": "", "status": "success", "event_id": "4624"},
 ]
 
+# EDR baseline for the benign-fanout service accounts. They run real admin tools
+# (robocopy / wsusscan / nessus probe) but emit NO attack-tool signal — that empty
+# `signal` IS the ground-truth discriminator the new rule keys on.
 _BENIGN_EDR = [
     {"_time": "2026-05-31T01:00:05Z", "host": "WKS-201", "user": "alice",
      "process": "chrome.exe", "parent_process": "explorer.exe",
      "cmdline": "chrome.exe --profile-directory=Default",
      "signal": "", "severity": "info", "action": "allowed"},
-    {"_time": "2026-05-31T01:33:20Z", "host": "BKP-09", "user": "svc_monitor",
+    {"_time": "2026-05-31T00:21:40Z", "host": "PATCH-01", "user": "svc_patch",
+     "process": "wuauclt.exe", "parent_process": "svchost.exe",
+     "cmdline": "wuauclt.exe /detectnow /updatenow",
+     "signal": "", "severity": "info", "action": "allowed"},
+    {"_time": "2026-05-31T00:46:00Z", "host": "SCAN-02", "user": "svc_vuln",
+     "process": "nessusd.exe", "parent_process": "services.exe",
+     "cmdline": "nessusd.exe --scan creds=svc_vuln",
+     "signal": "", "severity": "info", "action": "allowed"},
+    {"_time": "2026-05-31T01:33:20Z", "host": "MON-03", "user": "svc_monitor",
      "process": "robocopy.exe", "parent_process": "backup_agent.exe",
      "cmdline": "robocopy \\\\FS-01\\C$\\logs D:\\archive /MIR",
      "signal": "", "severity": "info", "action": "allowed"},
@@ -121,6 +127,8 @@ def _edr_row(e: dict, scenario: str) -> dict:
 
 def build_auth_rows() -> list[dict]:
     rows = [_auth_row(e, "lateral-movement") for e in SEED_AUTH_EVENTS]
+    # benign-fanout: legit service accounts that TRIP the old rule (the FP class)
+    rows += [_auth_row(e, "benign-fanout") for e in SEED_BENIGN_FANOUT_AUTH]
     rows += [_auth_row(e, "benign-noise") for e in _BENIGN_AUTH]
     rows.sort(key=lambda r: r["_time"])
     return rows

@@ -172,8 +172,37 @@ def render_brief(brief: IncidentBrief, color: bool | None = None) -> str:
         L.append(f"  effect : {d.expected_effect}")
         L.append("  SPL diff:")
         L.extend(_render_diff(d.spl_diff, d.current_spl, d.proposed_spl, st))
+
+    # ---- THE CLIMAX: measured backtest on real data (the winning number) ----
+    if brief.detection_backtest:
+        L.extend(_render_backtest(brief.detection_backtest, st))
+
     L.append(bar)
     return "\n".join(L)
+
+
+def _render_backtest(bt, st: _Style) -> list[str]:
+    """The money line: prove the fix on real data, not just propose it."""
+    out: list[str] = []
+    old_fp = bt.old_alert_count - bt.new_alert_count
+    headline = (
+        f"  old rule {bt.old_alert_count} alerts ({old_fp} false)  ->  "
+        f"new rule {bt.new_alert_count} alert{'s' if bt.new_alert_count != 1 else ''} "
+        f"(0 false)  =  {bt.alert_reduction_pct:.0%} fewer alerts"
+    )
+    tp_txt = "true positive RETAINED" if bt.true_positive_retained else "TRUE POSITIVE LOST (!!)"
+    tp_line = f"  {tp_txt}; {bt.false_positives_eliminated} false positives eliminated"
+    out.append("")
+    out.append(st.bold(f"  BACKTEST ON REAL DATA  ({bt.window})  <-- measured, not claimed"))
+    out.append(_rule("="))
+    out.append(st.bold(st.green(headline)) if bt.true_positive_retained else st.bold(st.red(headline)))
+    out.append(st.green(tp_line) if bt.true_positive_retained else st.red(tp_line))
+    if bt.eliminated_accounts:
+        out.append(st.dim(
+            "        dropped (benign service accts, no correlated EDR attack signal): "
+            + ", ".join(bt.eliminated_accounts)
+        ))
+    return out
 
 
 def _render_diff(

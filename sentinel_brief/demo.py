@@ -14,6 +14,7 @@ import asyncio
 import os
 
 from sentinel_brief.agents import run_sentinel_brief
+from sentinel_brief.backtest import run_backtest
 from sentinel_brief.live_context import build_live_detection_context
 from sentinel_brief.mcp_wiring import RemoteToolsEvidenceFilter
 from sentinel_brief.mock_service import (
@@ -77,6 +78,19 @@ async def main() -> int:
     if not brief.detection_name:
         brief.detection_name = DETECTION_NAME
 
+    # MEASURED detection loop: run the OLD vs NEW rule over the live data window and
+    # compute the FP-reduction deterministically from real query results. Live-only
+    # + fail-safe: in mock mode or on any error this returns None and the brief
+    # still renders the diff and everything else. The OLD-rule query is routed
+    # through the Splunk MCP Server's splunk_run_query (reinforces the MCP story).
+    if is_live:
+        import logging
+
+        bt_logger = logging.getLogger("sentinel_brief.backtest")
+        bt_logger.setLevel(logging.INFO)
+        bt_logger.addFilter(mcp_evidence)  # capture the MCP splunk_run_query line
+        brief.detection_backtest = run_backtest(service, logger=bt_logger)
+
     print(render_brief(brief))
 
     if mcp_evidence.captured:
@@ -87,6 +101,14 @@ async def main() -> int:
     print(f"[demo] verdict={brief.verdict} confidence={brief.confidence:.2f} "
           f"actions={len(brief.proposed_actions)} "
           f"has_detection_fix={brief.proposed_detection is not None}")
+    if brief.detection_backtest is not None:
+        b = brief.detection_backtest
+        print(f"[demo] BACKTEST (measured on real data, {b.window}): "
+              f"old={b.old_alert_count} new={b.new_alert_count} "
+              f"fps_eliminated={b.false_positives_eliminated} "
+              f"reduction={b.alert_reduction_pct:.0%} "
+              f"tp_retained={b.true_positive_retained} "
+              f"dropped={b.eliminated_accounts}")
     return 0
 
 

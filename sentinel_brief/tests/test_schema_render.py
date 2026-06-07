@@ -70,4 +70,7 @@ def test_mock_service_username_and_oneshot():
     body = svc.get(path_segment="authentication/current-context", output_mode="json").body
     assert "sentinel-analyst" in body
     rows = svc.jobs.oneshot("search index=auth action=logon logon_type=3")
-    assert rows == SEED_AUTH_EVENTS
+    # the malicious lateral-movement chain is the prefix; benign-fanout FP-class
+    # service accounts follow (added for the measured detection backtest).
+    assert rows[: len(SEED_AUTH_EVENTS)] == SEED_AUTH_EVENTS
+    assert len(rows) > len(SEED_AUTH_EVENTS)

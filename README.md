@@ -4,7 +4,8 @@
 `splunklib.ai`.** When a detection fires, Sentinel Brief turns it into one typed,
 auditable incident brief — verdict, MITRE ATT&CK mapping, attack timeline, blast
 radius, human-approved containment, and **the SPL rule fix that stops the alert
-from over-firing next time** — in under three minutes.
+from over-firing next time, backtested on real data to prove the false-positive
+reduction** — in under three minutes.
 
 > Splunk Agentic Ops Hackathon · Security track · Grand Prize entry.
 
@@ -57,8 +58,34 @@ baseline does not), and emits the change as a **unified SPL diff**:
 - it **adds** an `index=edr` correlation that removes the *entire* service-account
   false-positive class.
 
+### …and then it *proves* it (the measured backtest)
+
+A suggested rule change is a claim. Sentinel Brief turns it into a **measured
+result**. When running live, a deterministic backtest step replays **both** the
+old rule and the proposed new rule over the historical data window and computes,
+from real query results (not model prose):
+
+| metric | seeded run |
+|---|---|
+| `old_alert_count` | **4** (1 real attack + 3 benign service accounts) |
+| `new_alert_count` | **1** (the real attack only) |
+| `false_positives_eliminated` | **3** — `svc_monitor`, `svc_patch`, `svc_vuln` |
+| `true_positive_retained` | **true** — `svc_backup` / `WKS-014` still fires |
+| `alert_reduction_pct` | **75%** |
+
+The discriminator is honest and explicit: we make **no claim of an external
+ground-truth oracle**. The eliminated accounts are exactly the ones that fan out
+across admin shares but carry **no correlated attack-tool EDR signal**
+(`suspicious_download` / `remote_exec_tool`) on their origin host — that
+correlation is the ground-truth signal the new rule keys on. The number is
+computed by a pure function over real Splunk results and surfaced as the typed
+`detection_backtest` field on the brief; the OLD-rule query is routed through the
+**Splunk MCP Server's `splunk_run_query`** tool. The step is **live-gated and
+fail-safe**: in mock mode, or if the queries fail, `detection_backtest` is null
+and the brief still renders everything else.
+
 "Agentic operations that make your detections better every time they fire" —
-reactive → agentic → **self-improving**.
+reactive → agentic → **self-improving** → **measurably** self-improving.
 
 ## Why it wins (the four judging axes)
 
@@ -94,13 +121,17 @@ sentinel_brief/
 ├── requirements.txt            # pinned deps (develop-branch splunk-sdk[google])
 └── sentinel_brief/
     ├── agents.py               # F1 — supervisor + 4 subagents on splunklib.ai
-    ├── schemas.py              # F2 — the typed IncidentBrief (Pydantic)
-    ├── render.py               # F2 — one scannable brief view
+    ├── schemas.py              # F2 — the typed IncidentBrief + DetectionBacktest
+    ├── render.py               # F2 — one scannable brief view (backtest = climax)
     ├── config.py               # Vertex GoogleModel factory (ADC)
     ├── mock_service.py         # seeded scenario + drop-in MockService
+    ├── service_factory.py      # backend selector (live Splunk | mock)
+    ├── live_context.py         # builds the detection context from live SPL
+    ├── mcp_wiring.py           # remote Splunk MCP Server tool wiring (fail-safe)
+    ├── backtest.py             # measured old-vs-new-rule FP-reduction loop
     └── spl_tools.py            # local SPL tools (@registry.tool + ToolContext)
 seed_data/                      # auth.csv / edr.csv for the real-Splunk path
-tests/                          # 24 offline tests (zero API burn)
+tests/                          # 40 offline tests (zero API burn)
 ```
 
 ## What you need
@@ -174,10 +205,12 @@ cd sentinel_brief
 .venv/Scripts/python -m pytest tests/ -q
 ```
 
-24 tests cover schema bounds, the brief render (including the SPL-diff gutters and
+40 tests cover schema bounds, the brief render (including the SPL-diff gutters and
 the no-color/ANSI paths), the Detection-Engineer fix shape (keeps the TP, removes
-the FP class), mock-service determinism, and seed-CSV no-drift. They import the
-package only and **never call Vertex**.
+the FP class), the **backtest metric** (the 4→1 / 75% math, the eliminated-account
+logic, TP-lost detection, and the live-gated/fail-safe `run_backtest` contract),
+mock-service determinism, and seed-CSV no-drift. They import the package only and
+**never call Vertex or Splunk**.
 
 ## Swap to a real Splunk instance
 
@@ -205,13 +238,17 @@ live (still human-approved) containment.
 
 | Index | Rows | Malicious chain | Benign baseline |
 |---|---|---|---|
-| `auth` | 10 | 5 — `svc_backup` admin$ pivot from `WKS-014` | 5 — normal logons, incl. a benign `svc_monitor` |
-| `edr` | 4 | 2 — PowerShell download + PsExec | 2 — chrome, robocopy |
+| `auth` | 20 | 5 — `svc_backup` admin$ pivot from `WKS-014` | 15 — incl. **3 legit service accounts that fan out >3 dests** (`svc_monitor`, `svc_patch`, `svc_vuln`) + normal logons |
+| `edr` | 6 | 2 — PowerShell download + PsExec | 4 — chrome, robocopy, wuauclt, nessusd (no attack signal) |
 
-The benign rows make the index realistic and intentionally include a *legitimate*
-service account (`svc_monitor`) so the detection fix has a real false-positive
-class to remove. All events are timestamped **2026-05-31**, so search with the
-time picker on **All time** (see `seed_data/README.md`).
+The benign rows are not decoration: the three fan-out service accounts
+(`svc_monitor`, `svc_patch`, `svc_vuln`) **trip the old flat-threshold rule** —
+they are the genuine false-positive class. Each runs real admin tooling (patch
+deployment, vuln scanning, log archival) but emits **no attack-tool EDR signal**,
+so the EDR-correlated new rule correctly drops all three while still firing on
+`svc_backup`. This is what makes the backtest's 75% reduction real rather than
+zero. All events are timestamped **2026-05-31**, so search with the time picker on
+**All time** (see `seed_data/README.md`).
 
 ## Splunk AI capabilities used
 

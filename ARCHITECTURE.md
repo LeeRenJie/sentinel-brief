@@ -34,6 +34,9 @@ flowchart LR
         DET["Detection Engineer  *** THE WOW ***<br/>gemini-2.5-flash<br/>self-improving SPL fix (unified diff)"]
     end
 
+    %% ---------- Measured backtest (deterministic, live-gated) ----------
+    BT["backtest.py  *** MEASURED PROOF ***<br/>runs OLD + NEW rule on live data<br/>compute_backtest() -> DetectionBacktest<br/>old 4 / new 1 / 75% fewer / TP retained"]
+
     %% ---------- Models ----------
     subgraph MODELS["Google Vertex AI (ADC, GOOGLE_CLOUD_PROJECT / us-central1)"]
         PRO["gemini-2.5-pro<br/>reasoning tier"]
@@ -55,7 +58,7 @@ flowchart LR
     end
 
     %% ---------- Typed output ----------
-    BRIEF["IncidentBrief (Pydantic, schemas.py)<br/>verdict | severity | confidence | MITRE |<br/>timeline | blast_radius | proposed_actions |<br/>proposed_detection (SPL diff)"]
+    BRIEF["IncidentBrief (Pydantic, schemas.py)<br/>verdict | severity | confidence | MITRE |<br/>timeline | blast_radius | proposed_actions |<br/>proposed_detection (SPL diff) |<br/>detection_backtest (measured FP reduction)"]
 
     %% ---------- Flow ----------
     FIRE --> DEMO --> SUP
@@ -85,12 +88,22 @@ flowchart LR
     RES --> SUP
     DET --> SUP
 
-    SUP -->|"structured_output"| BRIEF --> RENDER
+    SUP -->|"structured_output"| BRIEF
+
+    %% measured backtest: live-gated, deterministic, runs OLD+NEW rule then
+    %% attaches the metric to the brief before render
+    BRIEF -->|"if live"| BT
+    BT -. "splunk_run_query (OLD rule)" .-> REMOTE
+    BT -. "join subsearch (NEW rule)" .-> SVC
+    BT -->|"detection_backtest"| BRIEF
+    BRIEF --> RENDER
 
     classDef wow fill:#7a1f1f,stroke:#ff5555,color:#fff,stroke-width:2px;
     classDef out fill:#16324a,stroke:#4aa3ff,color:#fff,stroke-width:2px;
+    classDef proof fill:#1f5132,stroke:#3ddc84,color:#fff,stroke-width:2px;
     class DET wow;
     class BRIEF out;
+    class BT proof;
 ```
 
 ---
@@ -117,8 +130,23 @@ flowchart LR
    false-positive class while preserving the true positive. The change is emitted
    as a **unified SPL diff**.
 6. **Supervisor** (pro) assembles everything into one **typed `IncidentBrief`**
-   via `output_schema=IncidentBrief`. `render.py` prints it as a single scannable
-   view, with the SPL diff as the visual climax.
+   via `output_schema=IncidentBrief`.
+7. **Measured backtest** (`backtest.py`, **live-gated, deterministic**) closes the
+   loop the Detection Engineer opens. After the brief is assembled, it replays
+   **both** the old flat-threshold rule and the new EDR-correlated rule over the
+   live data window and computes the result from real query rows — **not** from
+   model prose: `old_alert_count` (4), `new_alert_count` (1),
+   `false_positives_eliminated` (3: `svc_monitor`/`svc_patch`/`svc_vuln`),
+   `true_positive_retained` (true), `alert_reduction_pct` (75%). The OLD-rule query
+   is routed through the Splunk MCP Server's `splunk_run_query` tool; the NEW-rule
+   `join` runs via the local live service. The metric is attached to the brief as
+   the typed `detection_backtest` field. **Fail-safe:** in mock mode, or if the
+   queries error, `detection_backtest` is null and the brief still renders. The
+   discriminator is stated honestly — no external ground-truth oracle is claimed;
+   the eliminated accounts are exactly those with admin-share fan-out but no
+   correlated attack-tool EDR signal.
+8. `render.py` prints the brief as a single scannable view, with the **measured
+   backtest line as the climax** — directly after the SPL diff.
 
 ## Model tiers
 

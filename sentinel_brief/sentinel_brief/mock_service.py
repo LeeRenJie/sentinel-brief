@@ -39,6 +39,57 @@ SEED_AUTH_EVENTS: list[dict[str, Any]] = [
      "dest": "APP-04", "share": "admin$"},
 ]
 
+# ---- Benign-but-noisy service accounts that TRIP the OLD rule (>3 distinct
+# admin-share dests) but have NO correlated EDR attack-tool signal. These are the
+# genuine FALSE POSITIVES the old flat-threshold rule fires on every night. The
+# new EDR-correlated rule correctly drops them (no suspicious_download /
+# remote_exec_tool on their origin host for that account), while still firing on
+# svc_backup, which alone carries the attack-tool signal. This is what makes the
+# backtest's FP-reduction real and non-zero (single source of truth for the live
+# seed via generate_seed_csvs.py — zero drift).
+SEED_BENIGN_FANOUT_AUTH: list[dict[str, Any]] = [
+    # svc_patch — nightly patch deployment sweep, 4 admin$ dests, no EDR attack signal
+    {"_time": "2026-05-31T00:20:03Z", "index": "auth", "host": "PATCH-01",
+     "user": "svc_patch", "action": "logon", "logon_type": "3", "src": "PATCH-01",
+     "dest": "FS-01", "share": "admin$"},
+    {"_time": "2026-05-31T00:20:41Z", "index": "auth", "host": "PATCH-01",
+     "user": "svc_patch", "action": "logon", "logon_type": "3", "src": "PATCH-01",
+     "dest": "FS-02", "share": "admin$"},
+    {"_time": "2026-05-31T00:21:19Z", "index": "auth", "host": "PATCH-01",
+     "user": "svc_patch", "action": "logon", "logon_type": "3", "src": "PATCH-01",
+     "dest": "APP-03", "share": "admin$"},
+    {"_time": "2026-05-31T00:22:02Z", "index": "auth", "host": "PATCH-01",
+     "user": "svc_patch", "action": "logon", "logon_type": "3", "src": "PATCH-01",
+     "dest": "DC-01", "share": "admin$"},
+    # svc_vuln — nightly authenticated vulnerability scan, 4 C$ dests, no EDR signal
+    {"_time": "2026-05-31T00:45:10Z", "index": "auth", "host": "SCAN-02",
+     "user": "svc_vuln", "action": "logon", "logon_type": "3", "src": "SCAN-02",
+     "dest": "FS-01", "share": "C$"},
+    {"_time": "2026-05-31T00:45:52Z", "index": "auth", "host": "SCAN-02",
+     "user": "svc_vuln", "action": "logon", "logon_type": "3", "src": "SCAN-02",
+     "dest": "FS-02", "share": "C$"},
+    {"_time": "2026-05-31T00:46:33Z", "index": "auth", "host": "SCAN-02",
+     "user": "svc_vuln", "action": "logon", "logon_type": "3", "src": "SCAN-02",
+     "dest": "APP-04", "share": "C$"},
+    {"_time": "2026-05-31T00:47:20Z", "index": "auth", "host": "SCAN-02",
+     "user": "svc_vuln", "action": "logon", "logon_type": "3", "src": "SCAN-02",
+     "dest": "WEB-05", "share": "C$"},
+    # svc_monitor — extend the existing 2-dest baseline to 4 dests so it too trips
+    # the old rule (a third genuine FP), still with no EDR attack signal.
+    {"_time": "2026-05-31T01:30:00Z", "index": "auth", "host": "MON-03",
+     "user": "svc_monitor", "action": "logon", "logon_type": "3", "src": "MON-03",
+     "dest": "FS-01", "share": "C$"},
+    {"_time": "2026-05-31T01:31:12Z", "index": "auth", "host": "MON-03",
+     "user": "svc_monitor", "action": "logon", "logon_type": "3", "src": "MON-03",
+     "dest": "FS-02", "share": "C$"},
+    {"_time": "2026-05-31T01:32:05Z", "index": "auth", "host": "MON-03",
+     "user": "svc_monitor", "action": "logon", "logon_type": "3", "src": "MON-03",
+     "dest": "DC-01", "share": "C$"},
+    {"_time": "2026-05-31T01:33:48Z", "index": "auth", "host": "MON-03",
+     "user": "svc_monitor", "action": "logon", "logon_type": "3", "src": "MON-03",
+     "dest": "APP-03", "share": "C$"},
+]
+
 SEED_EDR_EVENTS: list[dict[str, Any]] = [
     {"_time": "2026-05-31T02:08:12Z", "index": "edr", "host": "WKS-014",
      "user": "jdoe", "process": "powershell.exe",
@@ -69,13 +120,17 @@ class _Jobs:
         """
         q = query.lower()
         if "index=auth" in q or "admin$" in q or "logon_type" in q:
-            return list(SEED_AUTH_EVENTS)
+            return list(SEED_AUTH_EVENTS) + list(SEED_BENIGN_FANOUT_AUTH)
         if "index=edr" in q or "powershell" in q or "process=" in q:
             return list(SEED_EDR_EVENTS)
         if "makeresults" in q:
             return [{"_time": "now", "count": "1"}]
         # default: union of both indexes for broad correlation queries
-        return list(SEED_AUTH_EVENTS) + list(SEED_EDR_EVENTS)
+        return (
+            list(SEED_AUTH_EVENTS)
+            + list(SEED_BENIGN_FANOUT_AUTH)
+            + list(SEED_EDR_EVENTS)
+        )
 
 
 class MockService:

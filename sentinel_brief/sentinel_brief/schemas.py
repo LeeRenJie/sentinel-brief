@@ -62,6 +62,35 @@ class ProposedDetection(BaseModel):
     expected_effect: str = Field(min_length=1, description="e.g. 'removes ~80% of svc-account FPs while keeping TP'.")
 
 
+class DetectionBacktest(BaseModel):
+    """Measured proof the proposed SPL fix works — computed deterministically from
+    real query results against the live indexes, NOT from model prose.
+
+    The OLD rule and the NEW (EDR-correlated) rule are both executed over the data
+    window. The benign service accounts the OLD rule flags but the NEW rule drops
+    are genuine false positives: they show admin-share fan-out but NO correlated
+    attack-tool EDR signal — that correlation IS the honest discriminator. We do
+    not claim an external ground-truth oracle; we state exactly that.
+    """
+
+    old_alert_count: int = Field(ge=0, description="Accounts the OLD flat-threshold rule fires on.")
+    new_alert_count: int = Field(ge=0, description="Accounts the NEW EDR-correlated rule fires on.")
+    false_positives_eliminated: int = Field(
+        ge=0, description="OLD-flagged accounts the NEW rule correctly drops (no correlated EDR attack signal)."
+    )
+    eliminated_accounts: list[str] = Field(
+        default_factory=list,
+        description="The benign service accounts dropped by the new rule (the eliminated FP class).",
+    )
+    true_positive_retained: bool = Field(
+        description="The confirmed compromise still appears in the NEW rule's results."
+    )
+    alert_reduction_pct: float = Field(
+        ge=0.0, le=1.0, description="(old - new) / old — fraction of alerts eliminated."
+    )
+    window: str = Field(description="The data window the backtest ran over, e.g. 'last 7d' or 'All time'.")
+
+
 class IncidentBrief(BaseModel):
     """The single scannable, auditable brief. Reads in 10s. F2 deliverable.
 
@@ -87,4 +116,9 @@ class IncidentBrief(BaseModel):
     )
     proposed_detection: ProposedDetection | None = Field(
         default=None, description="THE WOW — self-improving SPL detection fix."
+    )
+    detection_backtest: DetectionBacktest | None = Field(
+        default=None,
+        description="MEASURED proof the fix works — old vs new rule on real data. "
+        "Null in mock mode or if the live backtest can't run (fail-safe).",
     )
