@@ -203,6 +203,18 @@ The seeded scenario: a compromised `svc_backup` service account pivots from
 `WKS-014` across five admin$ shares, preceded by a suspicious PowerShell download
 and a PsExec remote-exec signal on the origin host.
 
+### Web console (SOC Detection-to-Decision UI)
+
+A single-screen console renders the same typed `IncidentBrief` as a security-ops
+war room: the fired-alert queue, an animated supervisor + 4-subagent fan-out, then
+the adjudicated brief with the backtested **75% false-positive reduction** as the
+hero. Vite + React + Tailwind + Framer Motion; bundles a real captured run so it
+renders instantly and offline. See `sentinel_brief/web/README.md`.
+
+```bash
+cd sentinel_brief/web && npm install && npm run dev      # http://localhost:5173
+```
+
 ### Run the offline tests (zero API burn)
 
 ```bash
