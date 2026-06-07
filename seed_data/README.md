@@ -6,14 +6,25 @@ mock service uses (`SEED_AUTH_EVENTS` / `SEED_EDR_EVENTS` in
 `sentinel_brief/sentinel_brief/mock_service.py`), so the live-Splunk demo matches
 the mock demo with **zero scenario drift**.
 
-| File | Rows | Malicious chain | Benign noise |
-|---|---|---|---|
-| `auth.csv` | 10 | 5 (`svc_backup` admin$ pivot from WKS-014) | 5 (normal logons) |
-| `edr.csv`  | 4  | 2 (powershell download + PsExec) | 2 (chrome, robocopy) |
+| File | Rows | Malicious chain | Benign fan-out (false-positive class) | Benign noise |
+|---|---|---|---|---|
+| `auth.csv` | 20 | 5 (`svc_backup` admin$ pivot from WKS-014) | 12 — `svc_patch` / `svc_vuln` / `svc_monitor`, each fanning out to 4 admin-share hosts | 3 (normal logons) |
+| `edr.csv`  | 6  | 2 (powershell download + PsExec) | — | 4 (benign processes: wuauclt, nessusd, robocopy, chrome) |
 
-The malicious rows (`scenario=lateral-movement`) ARE the seeded scenario. The
-benign rows (`scenario=benign-noise`) only make the index realistic; they do not
-touch `svc_backup` / `WKS-014` / `jdoe` and do not change the detection's behaviour.
+Three row classes, and they all matter:
+- **`scenario=lateral-movement`** — the real attack (`svc_backup` from `WKS-014`,
+  with a correlated malicious EDR signal). This is the **true positive**.
+- **`scenario=benign-fanout`** — legitimate service accounts (`svc_patch`,
+  `svc_vuln`, `svc_monitor`) that ALSO fan out across >3 admin shares but have **no
+  correlated attack-tool EDR signal**. These are the **false-positive class**: the
+  over-firing rule flags them, the backtested fix correctly drops them. They are
+  what makes the 75% false-positive-reduction number real.
+- **`scenario=benign-noise`** — low-volume normal logons that don't trip the rule.
+
+So the OLD rule (`distinct admin-share dests > 3`) fires on **4** accounts
+(`svc_backup` + the 3 benign fan-out accounts); the NEW rule (same fan-out
+**correlated with a malicious EDR signal**) fires on **1** (`svc_backup`) — a 75%
+alert reduction with the true positive retained.
 
 Regenerate at any time (single source of truth, deterministic):
 

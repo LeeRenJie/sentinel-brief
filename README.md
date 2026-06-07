@@ -184,9 +184,14 @@ $env:GOOGLE_CLOUD_LOCATION = "us-central1"
 
 ## Run the demo (mock-backed — no Splunk needed)
 
+`SENTINEL_BACKEND` defaults to `live` (real Splunk). For the no-Splunk path, set it
+to `mock` — the full agent spine still runs (it needs Vertex ADC + a Gemini model),
+only the data source is the seeded `MockService` instead of a live instance:
+
 ```bash
 cd sentinel_brief
-.venv/Scripts/python demo.py
+# Windows PowerShell:  $env:SENTINEL_BACKEND="mock"; .venv\Scripts\python demo.py
+SENTINEL_BACKEND=mock .venv/Scripts/python demo.py
 ```
 
 You'll see the supervisor fan out to the four subagents and then the rendered
@@ -254,8 +259,14 @@ zero. All events are timestamped **2026-05-31**, so search with the time picker 
 
 - **`splunklib.ai`** (Developer Tools) — supervisor + subagents, local SPL tools
   via `@registry.tool()` + `ToolContext.service`, structured `output_schema`.
-- **Splunk MCP Server** — remote tools, allowlisted and auto-discovered (token
-  auth), on the Correlator and Responder paths.
+- **Splunk MCP Server** — remote tools (`splunk_run_query`, `splunk_get_indexes`,
+  `splunk_get_metadata`) allowlisted and auto-discovered, with the encrypted token
+  auto-minted by `splunklib.ai`. The **backtest routes its OLD-rule query through
+  MCP deterministically**; the Correlator is also wired and prompted to call
+  `splunk_run_query` (a captured live run shows it invoked — see `MCP-EVIDENCE.md`),
+  though, as with any LLM tool use, that particular call is model-decided, not
+  guaranteed every run. Fail-safe: if MCP is unavailable the agent falls back to
+  local SPL and the brief is unchanged.
 - **Splunk Hosted Models** — documented bonus lane. The spine runs on Vertex, so
   Hosted-Models availability on the Enterprise trial is never load-bearing; the
   `| ai` path is designed and documented rather than required.
